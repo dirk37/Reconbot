@@ -18,7 +18,7 @@ def ping(url):
     Run the ping command against a host
     '''
     result = subprocess.run(['ping', '-c' if os.name == 'posix' else '-n', '3', url], stdout=subprocess.PIPE)
-    return False if result.returncode else result.stdout.decode('utf-8' if os.name == 'posix' else 'utf-16')
+    return False if result.returncode else result.stdout.decode('utf-8')
 
 def getip(url):
     '''
