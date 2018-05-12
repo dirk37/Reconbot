@@ -11,87 +11,53 @@ client = discord.Client()
 
 def ping(url):
 	result = os.popen('ping -4 ' + url).read()
-
-	if "Ping statistics" not in result:
-		return False
-	else:
-		return result
+	return result if 'Ping statistics' in result else False
 
 def getip(url):
 	result = os.popen('ping -4 -n 1 ' + url).read()
+	return result[1 + result.find('[') : result.find(']')] if 'Ping statistics' in result else False
 
-	if "Ping statistics" not in result:
-		return False
-	else:
-		result = result[1 + result.find("["):result.find("]")]
-		return result
-
-def send(msg):
-	msg = msg.format(message)
-
-# Handle messages received 
 def dispatch(message):
+	def sendf(fmt, *args):
+		await client.send_message(message.channel, fmt.format(*args))
+
+	data = message.content.split(' ')
+
 	if message.content.startswith('!hello'):
-		msg = 'Hello {0.author.mention}'.format(message)
-		await client.send_message(message.channel, msg)
+		sendf('Hello {0.author.mention}', message)
 
 	if message.content.startswith('!ping'):
-		data = message.content.split(" ")
-
 		if len(data) != 2:
-			msg = "Error. This command takes 1 argument"
-			await client.send_message(message.channel, msg)	
+			sendf('Error: this command takes 1 argument')
 		else:
-			url = data[1]
-			msg = 'Pinging ' + url
-
-			await client.send_message(message.channel, msg)	
-
+			sendf('Pinging {}', data[1])
 			msg = ping(url)
-
-			if msg == False:
-				msg = "Host not found / up"
-			else:
-				msg = msg[msg.find("Ping stat"):]
-			
-			await client.send_message(message.channel, msg)	
+			msg = msg[msg.find('Ping stat'):] if msg else 'Host not found / up'
+			sendf(msg)
 			
 	if message.content.startswith('!geo'):
-		data = message.content.split(" ")
-
 		if len(data) != 2:
-			msg = "Error. This command takes 1 argument"
-			await client.send_message(message.channel, msg)	
+			sendf('Error: this command takes 1 argument')
 		else:
 			url = data[1]
 			ip = getip(url)
 
-			if ip == False:
-				msg = "Host not found / up"
-				await client.send_message(message.channel, msg)	
-			else:
-				msg = "Ip address: " + ip
-
-				await client.send_message(message.channel, msg)	
-
-				r = requests.get("http://ipinfo.io/"+ ip +"?token=cc8b1d0905b2cf")
+			if ip:
+				sendf('Ip Address: {}', ip)
+				r = requests.get('http://ipinfo.io/{}?token=cc8b1d0905b2cf'.format(ip))
 				jdata = json.loads(r.text)
-				msg += "https://maps.google.com?q=" + jdata["loc"]
-
-				await client.send_message(message.channel, map)	
+				sendf('https://maps.google.com?q={}', jdata['loc'])
+			else:
+				sendf('Host not found / up')
 
 @client.event
 async def on_message(message):
-	# We do not want the bot to reply to itself
 	if message.author != client.user:
 		dispatch(message)
 
 @client.event
 async def on_ready():
-	print('Logged in as')
-	print(client.user.name)
-	print(client.user.id)
-	print('------')
+	print('Logged in as {} ({})'.format(client.user.name, client.user.id))
 
 if __name__ == '__main__':
 	config_location = 'config.ini'
