@@ -3,8 +3,10 @@
 This chat bot allows one to perform network recon through discord.
 '''
 import os
-import json
 import sys
+import json
+import socket
+import subprocess
 import configparser
 import discord
 import requests
@@ -15,15 +17,17 @@ def ping(url):
     '''
     Run the ping command against a host
     '''
-    result = os.popen('ping -4 ' + url).read()
-    return result if 'Ping statistics' in result else False
+    result = subprocess.run(['ping', '-c' if os.name == 'posix' else '-n', '3', url], stdout=subprocess.PIPE)
+    return False if result.returncode else result.stdout.decode('utf-8' if os.name == 'posix' else 'utf-16')
 
 def getip(url):
     '''
     Run the ping command to get the IP from a URL
     '''
-    result = os.popen('ping -4 -n 1 ' + url).read()
-    return result[1 + result.find('[') : result.find(']')] if 'Ping statistics' in result else False
+    try:
+        return socket.gethostbyname(url)
+    except socket.gaierror:
+        return False
 
 async def sendf(msg, fmt, *args):
     '''
@@ -47,7 +51,10 @@ async def dispatch(message):
         else:
             await sendf(message, 'Pinging {}', data[1])
             msg = ping(data[1])
-            msg = msg[msg.find('Ping stat'):] if msg else 'Host not found / up'
+
+            if not msg:
+                msg = 'Host not found / up'
+
             await sendf(message, msg)
     elif data[0] == '!geo':
         if len(data) != 2:
