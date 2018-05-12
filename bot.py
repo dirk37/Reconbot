@@ -1,72 +1,94 @@
 #!/usr/bin/env python3
-# https://github.com/Rapptz/discord.py/blob/async/examples/reply.py
-import discord
+'''
+This chat bot allows one to perform network recon through discord.
+'''
 import os
-import requests
 import json
-import configparser
 import sys
+import configparser
+import discord
+import requests
 
-client = discord.Client()
+CLIENT = discord.Client()
 
 def ping(url):
-	result = os.popen('ping -4 ' + url).read()
-	return result if 'Ping statistics' in result else False
+    '''
+    Run the ping command against a host
+    '''
+    result = os.popen('ping -4 ' + url).read()
+    return result if 'Ping statistics' in result else False
 
 def getip(url):
-	result = os.popen('ping -4 -n 1 ' + url).read()
-	return result[1 + result.find('[') : result.find(']')] if 'Ping statistics' in result else False
+    '''
+    Run the ping command to get the IP from a URL
+    '''
+    result = os.popen('ping -4 -n 1 ' + url).read()
+    return result[1 + result.find('[') : result.find(']')] if 'Ping statistics' in result else False
 
 async def sendf(msg, fmt, *args):
-	await client.send_message(msg.channel, fmt.format(*args))
+    '''
+    Helper method to send a formatted message to a the same channel as the
+    previous channel
+    '''
+    await CLIENT.send_message(msg.channel, fmt.format(*args))
 
 async def dispatch(message):
-	data = message.content.split(' ')
+    '''
+    This is parses the arguments of the command and dispatches the command to
+    the actual system commands that get run.
+    '''
+    data = message.content.split(' ')
 
-	if data[0] == '!hello':
-		await sendf(message, 'Hello {}', message.author.mention)
-	elif data[0] == '!ping':
-		if len(data) != 2:
-			await sendf(message, 'Error: this command takes 1 argument')
-		else:
-			await sendf(message, 'Pinging {}', data[1])
-			msg = ping(url)
-			msg = msg[msg.find('Ping stat'):] if msg else 'Host not found / up'
-			await sendf(message, msg)
-	elif data[0] == '!geo':
-		if len(data) != 2:
-			await sendf(message, 'Error: this command takes 1 argument')
-		else:
-			url = data[1]
-			ip = getip(url)
+    if data[0] == '!hello':
+        await sendf(message, 'Hello {}', message.author.mention)
+    elif data[0] == '!ping':
+        if len(data) != 2:
+            await sendf(message, 'Error: this command takes 1 argument')
+        else:
+            await sendf(message, 'Pinging {}', data[1])
+            msg = ping(data[1])
+            msg = msg[msg.find('Ping stat'):] if msg else 'Host not found / up'
+            await sendf(message, msg)
+    elif data[0] == '!geo':
+        if len(data) != 2:
+            await sendf(message, 'Error: this command takes 1 argument')
+        else:
+            url = data[1]
+            real_ip = getip(url)
 
-			if ip:
-				await sendf(message, 'Ip Address: {}', ip)
-				r = requests.get('http://ipinfo.io/{}?token=cc8b1d0905b2cf'.format(ip))
-				jdata = json.loads(r.text)
-				await sendf(message, 'https://maps.google.com?q={}', jdata['loc'])
-			else:
-				await sendf(message, 'Host not found / up')
+            if real_ip:
+                await sendf(message, 'Ip Address: {}', real_ip)
+                req = requests.get('http://ipinfo.io/{}?token=cc8b1d0905b2cf'.format(real_ip))
+                jdata = json.loads(req.text)
+                await sendf(message, 'https://maps.google.com?q={}', jdata['loc'])
+            else:
+                await sendf(message, 'Host not found / up')
 
-@client.event
+@CLIENT.event
 async def on_message(message):
-	if message.author != client.user:
-		await dispatch(message)
+    '''
+    This is the event that gets called when the bots gets messaged
+    '''
+    if message.author != CLIENT.user:
+        await dispatch(message)
 
-@client.event
+@CLIENT.event
 async def on_ready():
-	print('Logged in as {} ({})'.format(client.user.name, client.user.id))
+    '''
+    This is the event that gets called when the bots connected to the network
+    '''
+    print('Logged in as {} ({})'.format(CLIENT.user.name, CLIENT.user.id))
 
 if __name__ == '__main__':
-	config_location = 'config.ini'
+    CONFIG_LOCATION = 'config.ini'
 
-	if len(sys.argv) > 1:
-		config_location = sys.argv[1]
+    if len(sys.argv) > 1:
+        CONFIG_LOCATION = sys.argv[1]
 
-	config_parser = configparser.ConfigParser()
+    CONFIG_PARSER = configparser.ConfigParser()
 
-	with open(config_location, 'r') as f:
-		config_parser.read_file(f)
+    with open(CONFIG_LOCATION, 'r') as f:
+        CONFIG_PARSER.read_file(f)
 
-	config_token = config_parser['NetBot']['token']
-	client.run(config_token)
+    CONFIG_TOKEN = CONFIG_PARSER['NetBot']['token']
+    CLIENT.run(CONFIG_TOKEN)
