@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # https://github.com/Rapptz/discord.py/blob/async/examples/reply.py
 import discord
 import os
@@ -17,43 +17,41 @@ def getip(url):
 	result = os.popen('ping -4 -n 1 ' + url).read()
 	return result[1 + result.find('[') : result.find(']')] if 'Ping statistics' in result else False
 
-def dispatch(message):
-	def sendf(fmt, *args):
-		await client.send_message(message.channel, fmt.format(*args))
+async def sendf(msg, fmt, *args):
+	await client.send_message(msg.channel, fmt.format(*args))
 
+async def dispatch(message):
 	data = message.content.split(' ')
 
-	if message.content.startswith('!hello'):
-		sendf('Hello {0.author.mention}', message)
-
-	if message.content.startswith('!ping'):
+	if data[0] == '!hello':
+		await sendf(message, 'Hello {}', message.author.mention)
+	elif data[0] == '!ping':
 		if len(data) != 2:
-			sendf('Error: this command takes 1 argument')
+			await sendf(message, 'Error: this command takes 1 argument')
 		else:
-			sendf('Pinging {}', data[1])
+			await sendf(message, 'Pinging {}', data[1])
 			msg = ping(url)
 			msg = msg[msg.find('Ping stat'):] if msg else 'Host not found / up'
-			sendf(msg)
-			
-	if message.content.startswith('!geo'):
+			await sendf(message, msg)
+	elif data[0] == '!geo':
 		if len(data) != 2:
-			sendf('Error: this command takes 1 argument')
+			await sendf(message, 'Error: this command takes 1 argument')
 		else:
 			url = data[1]
 			ip = getip(url)
 
 			if ip:
-				sendf('Ip Address: {}', ip)
+				await sendf(message, 'Ip Address: {}', ip)
 				r = requests.get('http://ipinfo.io/{}?token=cc8b1d0905b2cf'.format(ip))
 				jdata = json.loads(r.text)
-				sendf('https://maps.google.com?q={}', jdata['loc'])
+				await sendf(message, 'https://maps.google.com?q={}', jdata['loc'])
 			else:
-				sendf('Host not found / up')
+				await sendf(message, 'Host not found / up')
 
 @client.event
 async def on_message(message):
 	if message.author != client.user:
-		dispatch(message)
+		await dispatch(message)
 
 @client.event
 async def on_ready():
@@ -68,7 +66,7 @@ if __name__ == '__main__':
 	config_parser = configparser.ConfigParser()
 
 	with open(config_location, 'r') as f:
-		config.read_file(f)
+		config_parser.read_file(f)
 
-	config_token = config['NetBot']['token']
+	config_token = config_parser['NetBot']['token']
 	client.run(config_token)
