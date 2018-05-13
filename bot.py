@@ -12,12 +12,22 @@ import discord
 import requests
 
 CLIENT = discord.Client()
+IPINFO_TOKEN = ''
+WHOIS_TOKEN = ''
+
+CMD_ARGS = {
+    '!hello': 0,
+    '!ping': 1,
+    '!ip': 1,
+    '!geo': 1
+}
 
 def ping(url):
     '''
     Run the ping command against a host
     '''
-    result = subprocess.run(['ping', '-c' if os.name == 'posix' else '-n', '3', url], stdout=subprocess.PIPE)
+    pingargs = ['ping', '-c' if os.name == 'posix' else '-n', '3', url]
+    result = subprocess.run(pingargs, stdout=subprocess.PIPE)
     return False if result.returncode else result.stdout.decode('utf-8')
 
 def getip(url):
@@ -43,33 +53,36 @@ async def dispatch(message):
     '''
     data = message.content.split(' ')
 
+    if data[0] not in CMD_ARGS:
+        return
+
+    if len(data) - 1 != CMD_ARGS[data[0]]:
+        await sendf(message, 'Error: `{}` takes {} argument(s)', data[0], CMD_ARGS[data[0]])
+        return
+
     if data[0] == '!hello':
         await sendf(message, 'Hello {}', message.author.mention)
     elif data[0] == '!ping':
-        if len(data) != 2:
-            await sendf(message, 'Error: this command takes 1 argument')
-        else:
-            await sendf(message, 'Pinging {}', data[1])
-            msg = ping(data[1])
+        await sendf(message, 'Pinging {}', data[1])
+        msg = ping(data[1])
 
-            if not msg:
-                msg = 'Host not found / up'
+        if not msg:
+            msg = 'Host not found / up'
 
-            await sendf(message, msg)
+        await sendf(message, msg)
+    elif data[0] == '!ip':
+        await sendf(message, 'Ip Address: {}', getip(data[1]))
     elif data[0] == '!geo':
-        if len(data) != 2:
-            await sendf(message, 'Error: this command takes 1 argument')
-        else:
-            url = data[1]
-            real_ip = getip(url)
+        real_ip = getip(data[1])
 
-            if real_ip:
-                await sendf(message, 'Ip Address: {}', real_ip)
-                req = requests.get('http://ipinfo.io/{}?token=cc8b1d0905b2cf'.format(real_ip))
-                jdata = json.loads(req.text)
-                await sendf(message, 'https://maps.google.com?q={}', jdata['loc'])
-            else:
-                await sendf(message, 'Host not found / up')
+        if not real_ip:
+            await sendf(message, 'Host not found / up')
+            return
+
+        await sendf(message, 'Ip Address: {}', real_ip)
+        req = requests.get('http://ipinfo.io/{}?token={}'.format(real_ip, IPINFO_TOKEN))
+        jdata = json.loads(req.text)
+        await sendf(message, 'https://maps.google.com?q={}', jdata['loc'])
 
 @CLIENT.event
 async def on_message(message):
@@ -97,5 +110,7 @@ if __name__ == '__main__':
     with open(CONFIG_LOCATION, 'r') as f:
         CONFIG_PARSER.read_file(f)
 
-    CONFIG_TOKEN = CONFIG_PARSER['NetBot']['token']
+    CONFIG_TOKEN = CONFIG_PARSER['Tokens']['discord']
+    IPINFO_TOKEN = CONFIG_PARSER['Tokens']['ipinfo']
+    WHOIS_TOKEN = CONFIG_PARSER['Tokens']['whois']
     CLIENT.run(CONFIG_TOKEN)
