@@ -7,7 +7,6 @@ import sys
 import asyncio
 import json
 import socket
-import subprocess
 import configparser
 import discord
 import requests
@@ -23,13 +22,20 @@ CMD_ARGS = {
     '!geo': 1
 }
 
-def ping(url):
+async def ping(chn, host):
     '''
     Run the ping command against a host
     '''
-    pingargs = ['ping', '-c' if os.name == 'posix' else '-n', '3', url]
-    result = subprocess.run(pingargs, stdout=subprocess.PIPE)
-    return False if result.returncode else result.stdout.decode('utf-8')
+    await sendf(chn, 'Pinging {}', host)
+    pingargs = ['ping', '-c' if os.name == 'posix' else '-n', '3', host]
+
+    proc = await asyncio.create_subprocess_exec(*pingargs, stdout=asyncio.subprocess.PIPE)
+    (data, _) = await proc.communicate()
+
+    if proc.returncode:
+        await sendf(chn, 'Error: host not up')
+    else:
+        await sendf(chn, '```{}```', data.decode('utf-8'))
 
 def getip(url):
     '''
@@ -65,13 +71,7 @@ async def dispatch(message):
     if data[0] == '!hello':
         await sendf(chn, 'Hello {}', message.author.mention)
     elif data[0] == '!ping':
-        await sendf(chn, 'Pinging {}', data[1])
-        msg = ping(data[1])
-
-        if not msg:
-            msg = 'Host not found / up'
-
-        await sendf(chn, msg)
+        await ping(chn, data[1])
     elif data[0] == '!ip':
         await sendf(chn, 'Ip Address: {}', getip(data[1]))
     elif data[0] == '!geo':
@@ -103,8 +103,8 @@ async def on_ready():
 
 if __name__ == '__main__':
     if sys.platform == 'win32':
-        loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
+        LOOP = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(LOOP)
 
     CONFIG_LOCATION = 'config.ini'
 
