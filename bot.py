@@ -4,6 +4,7 @@ This chat bot allows one to perform network recon through discord.
 '''
 import os
 import sys
+import asyncio
 import json
 import socket
 import subprocess
@@ -39,12 +40,12 @@ def getip(url):
     except socket.gaierror:
         return False
 
-async def sendf(chn, fmt, *args):
+async def sendf(chn, fmt, *args, **kwargs):
     '''
     Helper method to send a formatted message to a the same channel as the
     previous channel
     '''
-    await CLIENT.send_message(chn, fmt.format(*args))
+    await CLIENT.send_message(chn, fmt.format(*args, **kwargs))
 
 async def dispatch(message):
     '''
@@ -101,6 +102,10 @@ async def on_ready():
     print('Logged in as {} ({})'.format(CLIENT.user.name, CLIENT.user.id))
 
 if __name__ == '__main__':
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+
     CONFIG_LOCATION = 'config.ini'
 
     if len(sys.argv) > 1:
