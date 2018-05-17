@@ -6,11 +6,17 @@ import os
 import sys
 import asyncio
 import json
-import socket
 import configparser
 import discord
-import requests
+import aiodns
+import aiohttp
 
+if sys.platform == 'win32':
+    LOOP = asyncio.ProactorEventLoop()
+    asyncio.set_event_loop(LOOP)
+
+DNS_RESOLVER = aiodns.DNSResolver(loop=asyncio.get_event_loop())
+HTTP_SESSION = aiohttp.ClientSession(skip_auto_headers=['User-Agent'])
 CLIENT = discord.Client()
 IPINFO_TOKEN = ''
 WHOIS_TOKEN = ''
@@ -21,6 +27,13 @@ CMD_ARGS = {
     '!ip': 1,
     '!geo': 1
 }
+
+async def sendf(chn, fmt, *args, **kwargs):
+    '''
+    Helper method to send a formatted message to a the same channel as the
+    previous channel
+    '''
+    await CLIENT.send_message(chn, fmt.format(*args, **kwargs))
 
 async def ping(chn, host):
     '''
@@ -37,21 +50,30 @@ async def ping(chn, host):
     else:
         await sendf(chn, '```{}```', data.decode('utf-8'))
 
-def getip(url):
+async def dnsquery(chn, name):
     '''
     Run the ping command to get the IP from a URL
     '''
     try:
-        return socket.gethostbyname(url)
-    except socket.gaierror:
-        return False
+        hosts = await DNS_RESOLVER.query(name, 'A')
+        await sendf(chn, 'Ip Address for `{}` is `{}`', name, hosts[0].host)
+        return hosts[0].host
+    except aiodns.error.DNSError as err:
+        await sendf(chn, 'Error: {}', err.args[1])
 
-async def sendf(chn, fmt, *args, **kwargs):
+async def geolocate(chn, name):
     '''
-    Helper method to send a formatted message to a the same channel as the
-    previous channel
+    Get turn a name into an IP and then use ipinfo.io to get the geolocation
     '''
-    await CLIENT.send_message(chn, fmt.format(*args, **kwargs))
+    real_ip = await dnsquery(chn, name)
+
+    if real_ip:
+        req = await HTTP_SESSION.get('https://ipinfo.io/{}?token={}'.format(
+            real_ip, IPINFO_TOKEN))
+
+        txt = await req.text()
+        jdata = json.loads(txt)
+        await sendf(chn, 'https://maps.google.com?q={}', jdata['loc'])
 
 async def dispatch(message):
     '''
@@ -73,18 +95,9 @@ async def dispatch(message):
     elif data[0] == '!ping':
         await ping(chn, data[1])
     elif data[0] == '!ip':
-        await sendf(chn, 'Ip Address: {}', getip(data[1]))
+        await dnsquery(chn, data[1])
     elif data[0] == '!geo':
-        real_ip = getip(data[1])
-
-        if not real_ip:
-            await sendf(chn, 'Host not found / up')
-            return
-
-        await sendf(chn, 'Ip Address: {}', real_ip)
-        req = requests.get('http://ipinfo.io/{}?token={}'.format(real_ip, IPINFO_TOKEN))
-        jdata = json.loads(req.text)
-        await sendf(chn, 'https://maps.google.com?q={}', jdata['loc'])
+        await geolocate(chn, data[1])
 
 @CLIENT.event
 async def on_message(message):
@@ -102,10 +115,6 @@ async def on_ready():
     print('Logged in as {} ({})'.format(CLIENT.user.name, CLIENT.user.id))
 
 if __name__ == '__main__':
-    if sys.platform == 'win32':
-        LOOP = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(LOOP)
-
     CONFIG_LOCATION = 'config.ini'
 
     if len(sys.argv) > 1:
