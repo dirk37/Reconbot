@@ -7,6 +7,7 @@ import sys
 import asyncio
 import json
 import configparser
+import ipaddress
 import discord
 import aiodns
 import aiohttp
@@ -54,6 +55,13 @@ async def dnsquery(chn, name):
     '''
     Run the ping command to get the IP from a URL
     '''
+    try:
+        ipaddress.ip_address(name)
+        await sendf(chn, '`{}` is already a valid IP Address', name)
+        return name
+    except ValueError:
+        pass
+
     try:
         hosts = await DNS_RESOLVER.query(name, 'A')
         await sendf(chn, 'Ip Address for `{}` is `{}`', name, hosts[0].host)
