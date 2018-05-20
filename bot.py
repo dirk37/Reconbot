@@ -16,7 +16,7 @@ if sys.platform == 'win32':
     LOOP = asyncio.ProactorEventLoop()
     asyncio.set_event_loop(LOOP)
 
-DNS_RESOLVER = aiodns.DNSResolver(loop=asyncio.get_event_loop())
+DNS_RESOLVER = aiodns.DNSResolver()
 HTTP_SESSION = aiohttp.ClientSession(skip_auto_headers=['User-Agent'])
 CLIENT = discord.Client()
 IPINFO_TOKEN = ''
@@ -64,7 +64,7 @@ async def dnsquery(chn, name):
 
     try:
         hosts = await DNS_RESOLVER.query(name, 'A')
-        await sendf(chn, 'Ip Address for `{}` is `{}`', name, hosts[0].host)
+        await sendf(chn, 'IP Address for `{}` is `{}`', name, hosts[0].host)
         return hosts[0].host
     except aiodns.error.DNSError as err:
         await sendf(chn, 'Error: {}', err.args[1])
@@ -81,7 +81,14 @@ async def geolocate(chn, name):
 
         txt = await req.text()
         jdata = json.loads(txt)
-        await sendf(chn, 'https://maps.google.com?q={}', jdata['loc'])
+
+        if 'loc' in jdata:
+            await sendf(chn, 'https://maps.google.com?q={}', jdata['loc'])
+        elif 'error' in jdata:
+            err = jdata['error']
+            await sendf(chn, 'Error: {}: {}', err['title'], err['message'])
+        else:
+            await sendf(chn, 'Error: Data unavailable')
 
 async def dispatch(message):
     '''
