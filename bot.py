@@ -8,26 +8,19 @@ import asyncio
 import json
 import configparser
 import ipaddress
+import re
 import discord
 import aiodns
 import aiohttp
 
 if sys.platform == 'win32':
-    LOOP = asyncio.ProactorEventLoop()
-    asyncio.set_event_loop(LOOP)
+    asyncio.set_event_loop(asyncio.ProactorEventLoop())
 
 DNS_RESOLVER = aiodns.DNSResolver()
 HTTP_SESSION = aiohttp.ClientSession(skip_auto_headers=['User-Agent'])
 CLIENT = discord.Client()
 IPINFO_TOKEN = ''
 WHOIS_TOKEN = ''
-
-CMD_ARGS = {
-    '!hello': 0,
-    '!ping': 1,
-    '!ip': 1,
-    '!geo': 1
-}
 
 async def sendf(chn, fmt, *args, **kwargs):
     '''
@@ -53,7 +46,7 @@ async def ping(chn, host):
 
 async def dnsquery(chn, name):
     '''
-    Run the ping command to get the IP from a URL
+    Convert a hostname to an IP address
     '''
     try:
         ipaddress.ip_address(name)
@@ -90,37 +83,43 @@ async def geolocate(chn, name):
         else:
             await sendf(chn, 'Error: Data unavailable')
 
-async def dispatch(message):
-    '''
-    This is parses the arguments of the command and dispatches the command to
-    the actual system commands that get run.
-    '''
-    data = message.content.split(' ')
-    chn = message.channel
+CMDS = {
+    '!ping': ping,
+    '!ip': dnsquery,
+    '!geo': geolocate
+}
 
-    if data[0] not in CMD_ARGS:
-        return
-
-    if len(data) - 1 != CMD_ARGS[data[0]]:
-        await sendf(chn, 'Error: `{}` takes {} argument(s)', data[0], CMD_ARGS[data[0]])
-        return
-
-    if data[0] == '!hello':
-        await sendf(chn, 'Hello {}', message.author.mention)
-    elif data[0] == '!ping':
-        await ping(chn, data[1])
-    elif data[0] == '!ip':
-        await dnsquery(chn, data[1])
-    elif data[0] == '!geo':
-        await geolocate(chn, data[1])
+BAD_ARG_COUNT_RE = re.compile(r'takes (\d+) positional arguments but \d+ were given')
+MISSING_ARG_RE = re.compile(r'missing (\d+) required positional arguments?: (.+)')
 
 @CLIENT.event
-async def on_message(message):
+async def on_message(msg):
     '''
     This is the event that gets called when the bots gets messaged
     '''
-    if message.author != CLIENT.user:
-        await dispatch(message)
+    chan = msg.channel
+    data = msg.content.split(' ')
+
+    if msg.author == CLIENT.user:
+        return
+
+    try:
+        await CMDS[data[0]](chan, *(data[1:]))
+    except KeyError:
+        pass
+    except TypeError as err:
+        match = BAD_ARG_COUNT_RE.search(str(err))
+
+        if match:
+            await sendf(chan, 'Error: `{}` expects {} args but {} were given',
+                        data[0], int(match[1]) - 1, len(data) - 1)
+        else:
+            match = MISSING_ARG_RE.search(str(err))
+
+            if match:
+                await sendf(chan, 'Error: `{}` expects {} args but {} were given',
+                            data[0], int(match[1]), len(data) - 1)
+                await sendf(chan, '`{} {}`', data[0], match[2])
 
 @CLIENT.event
 async def on_ready():
