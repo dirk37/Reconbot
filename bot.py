@@ -6,117 +6,127 @@ import os
 import sys
 import asyncio
 import json
-import socket
 import configparser
-import discord
-import requests
+import ipaddress
+import aiohttp
 
-CLIENT = discord.Client()
-IPINFO_TOKEN = ''
-WHOIS_TOKEN = ''
+from discord.ext import commands
 
-CMD_ARGS = {
-    '!hello': 0,
-    '!ping': 1,
-    '!ip': 1,
-    '!geo': 1
-}
+if sys.platform == 'win32':
+    import socket
+    asyncio.set_event_loop(asyncio.ProactorEventLoop())
+else:
+    import aiodns
+    DNS_RESOLVER = aiodns.DNSResolver()
 
-async def ping(chn, host):
+CONFIG_LOCATION = 'config.ini'
+CONFIG_PARSER = configparser.ConfigParser()
+HTTP_SESSION = aiohttp.ClientSession(skip_auto_headers=['User-Agent'])
+BOT = commands.Bot(command_prefix='%', description='Perform network recon operations')
+
+if len(sys.argv) > 1:
+    CONFIG_LOCATION = sys.argv[1]
+
+with open(CONFIG_LOCATION, 'r') as f:
+    CONFIG_PARSER.read_file(f)
+
+@BOT.command()
+async def ping(name: str, count: int = 3):
     '''
-    Run the ping command against a host
+    Run the ping(1) command against a host
     '''
-    await sendf(chn, 'Pinging {}', host)
-    pingargs = ['ping', '-c' if os.name == 'posix' else '-n', '3', host]
+    await BOT.say('Pinging `{}`'.format(name))
+    args = ['ping', '-c' if os.name == 'posix' else '-n', str(count), name]
 
-    proc = await asyncio.create_subprocess_exec(*pingargs, stdout=asyncio.subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
     (data, _) = await proc.communicate()
 
     if proc.returncode:
-        await sendf(chn, 'Error: host not up')
+        await BOT.say('Error: Host not up')
     else:
-        await sendf(chn, '```{}```', data.decode('utf-8'))
+        await BOT.say('```{}```'.format(data.decode('utf-8')))
 
-def getip(url):
+@BOT.command()
+async def whois(name: str):
     '''
-    Run the ping command to get the IP from a URL
+    Run the whois(1) command against a domain name
     '''
-    try:
-        return socket.gethostbyname(url)
-    except socket.gaierror:
-        return False
+    await BOT.say('Running WHOIS against `{}`'.format(name))
+    args = ['whois', name]
 
-async def sendf(chn, fmt, *args, **kwargs):
+    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
+    (data, _) = await proc.communicate()
+
+    if proc.returncode:
+        await BOT.say('Error: Could not find host')
+    else:
+        await BOT.say('```{}```'.format(data.decode('utf-8')))
+
+async def dnsquery(name: str):
     '''
-    Helper method to send a formatted message to a the same channel as the
-    previous channel
+    Convert a hostname to an IP address
     '''
-    await CLIENT.send_message(chn, fmt.format(*args, **kwargs))
+    if sys.platform == 'win32':
+        try:
+            host = socket.gethostbyname(name)
 
-async def dispatch(message):
+            if host == name:
+                await BOT.say('`{}` is already a valid IP Address'.format(name))
+            else:
+                await BOT.say('IP Address for `{}` is `{}`'.format(name, host))
+
+            return host
+        except socket.gaierror as err:
+            await BOT.say('Error: {}'.format(err))
+    else:
+        try:
+            ipaddress.ip_address(name)
+            await BOT.say('`{}` is already a valid IP Address'.format(name))
+            return name
+        except ValueError:
+            pass
+
+        try:
+            hosts = await DNS_RESOLVER.query(name, 'A')
+            await BOT.say('IP Address for `{}` is `{}`'.format(name, hosts[0].host))
+            return hosts[0].host
+        except aiodns.error.DNSError as err:
+            await BOT.say('Error: {}'.format(err.args[1]))
+
+@BOT.command()
+async def hostresolve(name: str):
     '''
-    This is parses the arguments of the command and dispatches the command to
-    the actual system commands that get run.
+    Gets the raw IP address of a hostname
     '''
-    data = message.content.split(' ')
-    chn = message.channel
+    await dnsquery(name)
 
-    if data[0] not in CMD_ARGS:
-        return
-
-    if len(data) - 1 != CMD_ARGS[data[0]]:
-        await sendf(chn, 'Error: `{}` takes {} argument(s)', data[0], CMD_ARGS[data[0]])
-        return
-
-    if data[0] == '!hello':
-        await sendf(chn, 'Hello {}', message.author.mention)
-    elif data[0] == '!ping':
-        await ping(chn, data[1])
-    elif data[0] == '!ip':
-        await sendf(chn, 'Ip Address: {}', getip(data[1]))
-    elif data[0] == '!geo':
-        real_ip = getip(data[1])
-
-        if not real_ip:
-            await sendf(chn, 'Host not found / up')
-            return
-
-        await sendf(chn, 'Ip Address: {}', real_ip)
-        req = requests.get('http://ipinfo.io/{}?token={}'.format(real_ip, IPINFO_TOKEN))
-        jdata = json.loads(req.text)
-        await sendf(chn, 'https://maps.google.com?q={}', jdata['loc'])
-
-@CLIENT.event
-async def on_message(message):
+@BOT.command()
+async def geolocate(name: str):
     '''
-    This is the event that gets called when the bots gets messaged
+    Gets the geolocation of a hostname
     '''
-    if message.author != CLIENT.user:
-        await dispatch(message)
+    real_ip = await dnsquery(name)
 
-@CLIENT.event
+    if real_ip:
+        req = await HTTP_SESSION.get('https://ipinfo.io/{}?token={}'.format(
+            real_ip, CONFIG_PARSER['Tokens']['ipinfo']))
+
+        txt = await req.text()
+        jdata = json.loads(txt)
+
+        if 'loc' in jdata:
+            await BOT.say('https://maps.google.com?q={}'.format(jdata['loc']))
+        elif 'error' in jdata:
+            err = jdata['error']
+            await BOT.say('Error: {}: {}'.format(err['title'], err['message']))
+        else:
+            await BOT.say('Error: Data unavailable')
+
+@BOT.event
 async def on_ready():
     '''
-    This is the event that gets called when the bots connected to the network
+    This is the event that gets called when the bot connects to the network
     '''
-    print('Logged in as {} ({})'.format(CLIENT.user.name, CLIENT.user.id))
+    print('Logged in as {} ({})'.format(BOT.user.name, BOT.user.id))
 
-if __name__ == '__main__':
-    if sys.platform == 'win32':
-        LOOP = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(LOOP)
-
-    CONFIG_LOCATION = 'config.ini'
-
-    if len(sys.argv) > 1:
-        CONFIG_LOCATION = sys.argv[1]
-
-    CONFIG_PARSER = configparser.ConfigParser()
-
-    with open(CONFIG_LOCATION, 'r') as f:
-        CONFIG_PARSER.read_file(f)
-
-    CONFIG_TOKEN = CONFIG_PARSER['Tokens']['discord']
-    IPINFO_TOKEN = CONFIG_PARSER['Tokens']['ipinfo']
-    WHOIS_TOKEN = CONFIG_PARSER['Tokens']['whois']
-    CLIENT.run(CONFIG_TOKEN)
+BOT.run(CONFIG_PARSER['Tokens']['discord'])
