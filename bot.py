@@ -118,8 +118,7 @@ async def on_message(msg):
 
             if match:
                 await sendf(chan, 'Error: `{}` expects {} args but {} were given',
-                            data[0], int(match[1]), len(data) - 1)
-                await sendf(chan, '`{} {}`', data[0], match[2])
+                            data[0], int(match[1]) - len(data) + 1, len(data) - 1)
 
 @CLIENT.event
 async def on_ready():
