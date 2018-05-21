@@ -20,17 +20,15 @@ else:
     DNS_RESOLVER = aiodns.DNSResolver()
 
 CONFIG_LOCATION = 'config.ini'
+CONFIG_PARSER = configparser.ConfigParser()
+HTTP_SESSION = aiohttp.ClientSession(skip_auto_headers=['User-Agent'])
+BOT = commands.Bot(command_prefix='%', description='Perform network recon operations')
 
 if len(sys.argv) > 1:
     CONFIG_LOCATION = sys.argv[1]
 
-CONFIG_PARSER = configparser.ConfigParser()
-
 with open(CONFIG_LOCATION, 'r') as f:
     CONFIG_PARSER.read_file(f)
-
-HTTP_SESSION = aiohttp.ClientSession(skip_auto_headers=['User-Agent'])
-BOT = commands.Bot(command_prefix='%', description='Perform network recon operations')
 
 @BOT.command()
 async def ping(name: str):
