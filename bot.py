@@ -31,18 +31,34 @@ with open(CONFIG_LOCATION, 'r') as f:
     CONFIG_PARSER.read_file(f)
 
 @BOT.command()
-async def ping(name: str):
+async def ping(name: str, count: int = 3):
     '''
     Run the ping(1) command against a host
     '''
-    await BOT.say('Pinging {}'.format(name))
-    pingargs = ['ping', '-c' if os.name == 'posix' else '-n', '3', name]
+    await BOT.say('Pinging `{}`'.format(name))
+    args = ['ping', '-c' if os.name == 'posix' else '-n', str(count), name]
 
-    proc = await asyncio.create_subprocess_exec(*pingargs, stdout=asyncio.subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
     (data, _) = await proc.communicate()
 
     if proc.returncode:
         await BOT.say('Error: Host not up')
+    else:
+        await BOT.say('```{}```'.format(data.decode('utf-8')))
+
+@BOT.command()
+async def whois(name: str):
+    '''
+    Run the whois(1) command against a domain name
+    '''
+    await BOT.say('Running WHOIS against `{}`'.format(name))
+    args = ['whois', name]
+
+    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
+    (data, _) = await proc.communicate()
+
+    if proc.returncode:
+        await BOT.say('Error: Could not find host')
     else:
         await BOT.say('```{}```'.format(data.decode('utf-8')))
 
