@@ -47,6 +47,22 @@ async def ping(name: str, count: int = 3):
         await BOT.say('```{}```'.format(data.decode('utf-8')))
 
 @BOT.command()
+async def traceroute(name: str):
+    '''
+    Run the traceroute(8) command against a host
+    '''
+    await BOT.say('Running traceroute on `{}`'.format(name))
+
+    proc = await asyncio.create_subprocess_exec('traceroute', name,
+        stdout=asyncio.subprocess.PIPE)
+    (data, _) = await proc.communicate()
+
+    if proc.returncode:
+        await BOT.say('Error: Traceroute failed')
+    else:
+        await BOT.say('```{}```'.format(data.decode('utf-8')))
+
+@BOT.command()
 async def whois(name: str):
     '''
     Run the whois(1) command against a domain name
@@ -91,7 +107,8 @@ async def dnsquery(name: str):
             await BOT.say('IP Address for `{}` is `{}`'.format(name, hosts[0].host))
             return hosts[0].host
         except aiodns.error.DNSError as err:
-            await BOT.say('Error: {}'.format(err.args[1]))
+            (_, reason) = err.args
+            await BOT.say('Error: {}'.format(reason))
 
 @BOT.command()
 async def hostresolve(name: str):
