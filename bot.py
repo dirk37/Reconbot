@@ -47,19 +47,35 @@ async def ping(name: str, count: int = 3):
         await BOT.say('```{}```'.format(data.decode('utf-8')))
 
 @BOT.command()
+async def traceroute(name: str):
+    '''
+    Run the traceroute(8) command against a host
+    '''
+    await BOT.say('Running traceroute on `{}`'.format(name))
+
+    proc = await asyncio.create_subprocess_exec('traceroute', name,
+                                                stdout=asyncio.subprocess.PIPE)
+    (data, _) = await proc.communicate()
+
+    if proc.returncode:
+        await BOT.say('Error: Traceroute failed')
+    else:
+        await BOT.say('```{}```'.format(data.decode('utf-8')))
+
+@BOT.command()
 async def whois(name: str):
     '''
     Get whois data for specified domain from jsonwhois.io api
     '''
     await BOT.say('Running WHOIS against `{}`'.format(name))
-	
-    req = await HTTP_SESSION.get('https://api.jsonwhois.io/whois/domain?key={}&domain={}'.format(CONFIG_PARSER['Tokens']['whois'], name))
+
+    req = await HTTP_SESSION.get('https://api.jsonwhois.io/whois/domain?key={}&domain={}'.format(
+        CONFIG_PARSER['Tokens']['whois'], name))
     txt = await req.text()
     jdata = json.loads(txt)
 
     await BOT.say('```{}```'.format(json.dumps(jdata, sort_keys=True, indent=4)))
 
-	
 async def dnsquery(name: str):
     '''
     Convert a hostname to an IP address
@@ -134,9 +150,8 @@ async def nmap(name: str):
     if proc.returncode:
         await BOT.say('Error: Could not find host')
     else:
-        await BOT.say('```{}```'.format(data.decode('utf-8')))			
-			
-			
+        await BOT.say('```{}```'.format(data.decode('utf-8')))
+
 @BOT.event
 async def on_ready():
     '''
