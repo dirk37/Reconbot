@@ -65,19 +65,17 @@ async def traceroute(name: str):
 @BOT.command()
 async def whois(name: str):
     '''
-    Run the whois(1) command against a domain name
+    Get whois data for specified domain from jsonwhois.io api
     '''
     await BOT.say('Running WHOIS against `{}`'.format(name))
-    args = ['whois', name]
+	
+    req = await HTTP_SESSION.get('https://api.jsonwhois.io/whois/domain?key={}&domain={}'.format(CONFIG_PARSER['Tokens']['whois'], name))
+    txt = await req.text()
+    jdata = json.loads(txt)
 
-    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
-    (data, _) = await proc.communicate()
+    await BOT.say('```{}```'.format(json.dumps(jdata, sort_keys=True, indent=4)))
 
-    if proc.returncode:
-        await BOT.say('Error: Could not find host')
-    else:
-        await BOT.say('```{}```'.format(data.decode('utf-8')))
-
+	
 async def dnsquery(name: str):
     '''
     Convert a hostname to an IP address
@@ -139,6 +137,23 @@ async def geolocate(name: str):
         else:
             await BOT.say('Error: Data unavailable')
 
+@BOT.command()
+async def nmap(name: str):
+    '''
+    Run the nmap(1) command against a domain name
+    '''
+    await BOT.say('Running NMAP against `{}`'.format(name))
+    args = ['nmap', name]
+
+    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
+    (data, _) = await proc.communicate()
+
+    if proc.returncode:
+        await BOT.say('Error: Could not find host')
+    else:
+        await BOT.say('```{}```'.format(data.decode('utf-8')))			
+			
+			
 @BOT.event
 async def on_ready():
     '''
